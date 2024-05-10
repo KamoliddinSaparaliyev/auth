@@ -6,17 +6,30 @@ import PasswordValidator from "password-validator";
 
 import HttpException from "../models/http-exeption.model";
 import prisma from "../../prisma/client";
+import httpValidator from "../shared/htto-validator";
+import AuthValidator from "../validators/auth";
 
+/**
+ * Controller class for handling authentication-related operations.
+ */
 export class AuthController {
-  login = expressAsyncHandler(async (req: Request, res: Response) => {
+  /**
+   * Handles the login functionality.
+   *
+   * @param req - The Express Request object.
+   * @param res - The Express Response object.
+   * @returns A JSON response indicating the success of the login operation and providing access and refresh tokens.
+   * @throws HttpException with status 404 if the username or password is incorrect.
+   * @throws HttpException with status 401 if the username or password is incorrect.
+   */
+  static login = expressAsyncHandler(async (req: Request, res: Response) => {
+    httpValidator({ body: req.body }, { body: AuthValidator.loginSchema });
+
     const { email, password } = req.body;
 
     const user = await prisma.user.findFirst({
       where: {
         email,
-      },
-      include: {
-        role: true,
       },
     });
 
@@ -49,17 +62,30 @@ export class AuthController {
     });
   });
 
-  regiter = expressAsyncHandler(async (req: Request, res: Response) => {
+  /**
+   * Registers a new user.
+   *
+   * @param req - The request object containing the user's information.
+   * @param res - The response object used to send the registration status.
+   * @returns A JSON response indicating the success or failure of the registration.
+   * @throws HttpException with status 400 if the user already exists, passwords do not match, or password validation fails.
+   */
+  static regiter = expressAsyncHandler(async (req: Request, res: Response) => {
     const { email, password, coniformPassword, username } = req.body;
 
-    const user = await prisma.user.findFirst({
+    const userEmail = await prisma.user.findFirst({
       where: {
         email,
+      },
+    });
+
+    const userName = await prisma.user.findFirst({
+      where: {
         username,
       },
     });
 
-    if (user) {
+    if (userEmail || userName) {
       throw new HttpException(400, "User already exists");
     }
 
