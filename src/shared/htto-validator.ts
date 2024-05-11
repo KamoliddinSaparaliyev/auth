@@ -42,8 +42,6 @@ const httpValidator = (
     );
   };
 
-  const errors: string[] = [];
-
   Object.keys(schemaData).forEach((key) => {
     const schema = schemaData[key as keyof RequestData];
     const validSchema = validationSchema[key as keyof ValidationSchema];
@@ -51,17 +49,10 @@ const httpValidator = (
     if (schema && validSchema) {
       const { error } = validate(schema, validSchema);
       if (error) {
-        errors.push(...error.details.map((d) => d.message));
+        throw error;
       }
     }
   });
-
-  if (errors.length > 0) {
-    throw new HttpException(400, {
-      success: false,
-      message: errors.join(", "),
-    });
-  }
 };
 
 export default httpValidator;

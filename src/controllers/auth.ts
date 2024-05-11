@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
-import { compare } from "bcryptjs";
-import { sign } from "jsonwebtoken";
+import { compare, hash } from "bcryptjs";
+import { sign, verify } from "jsonwebtoken";
 import expressAsyncHandler from "express-async-handler";
 import PasswordValidator from "password-validator";
 
@@ -47,7 +47,7 @@ export class AuthController {
     });
 
     const refresh_token = sign(
-      { id: user.id },
+      { user: { id: user.id } },
       process.env.JWT_REFRESH_SECRET,
       {
         expiresIn: process.env.JWT_REFRESH_EXPIRES_IN,
@@ -71,7 +71,8 @@ export class AuthController {
    * @throws HttpException with status 400 if the user already exists, passwords do not match, or password validation fails.
    */
   static regiter = expressAsyncHandler(async (req: Request, res: Response) => {
-    const { email, password, coniformPassword, username } = req.body;
+    httpValidator;
+    const { email, password, confirmPassword, username, name } = req.body;
 
     const userEmail = await prisma.user.findFirst({
       where: {
@@ -89,7 +90,7 @@ export class AuthController {
       throw new HttpException(400, "User already exists");
     }
 
-    if (password !== coniformPassword) {
+    if (password !== confirmPassword) {
       throw new HttpException(400, "Passwords do not match");
     }
 
@@ -117,15 +118,76 @@ export class AuthController {
     const isArray = Array.isArray(result);
 
     if (isArray && result.length > 0) {
-      const errorMessage = result.map((m) => m.message).join(", ");
-      throw new HttpException(400, {
-        success: false,
-        message: errorMessage,
-      });
+      throw new HttpException(400, result.map((e) => e.message).join(", "));
     }
 
-    await prisma.user.create({ data: req.body });
+    const hashedPassword = await hash(password, 10);
+
+    await prisma.user.create({
+      data: { email, password: hashedPassword, username, name },
+    });
 
     res.status(201).json({ success: true, message: "Register successful" });
   });
+
+  static getMe = expressAsyncHandler(async (req: Request, res: Response) => {
+    const user = await prisma.user.findFirst({
+      where: {
+        id: req.user.id,
+      },
+    });
+
+    if (!user) {
+      throw new HttpException(404, "User not found");
+    }
+
+    const result = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      name: user.name,
+      created_at: user.created_at,
+    };
+
+    res.status(200).json({ success: true, data: { user: result } });
+  });
+
+  static refreshToken = expressAsyncHandler(
+    async (req: Request, res: Response) => {
+      httpValidator(
+        { body: req.body },
+        { body: AuthValidator.refreshTokenSchema }
+      );
+      const { refresh_token } = req.body;
+
+      try {
+        const decoded: any = verify(
+          refresh_token,
+          process.env.JWT_REFRESH_SECRET
+        );
+
+        const user = await prisma.user.findFirst({
+          where: {
+            id: decoded.user.id,
+          },
+        });
+
+        if (!user) {
+          throw new HttpException(404, "User not found");
+        }
+
+        const access_token = sign({ id: user.id }, process.env.JWT_SECRET, {
+          expiresIn: process.env.JWT_EXPIRES_IN,
+        });
+
+        res.status(200).json({
+          success: true,
+          message: "Token refreshed",
+          access_token,
+        });
+      } catch (error) {
+        throw new HttpException(401, "Invalid token");
+      }
+    }
+  );
 }

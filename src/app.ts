@@ -7,8 +7,9 @@ import express, {
 } from "express";
 import cors from "cors";
 import router from "./routes";
-import HttpException from "./models/http-exeption.model";
 import expressAsyncHandler from "express-async-handler";
+import errorHandler from "./shared/errorHandler";
+import HttpException from "./models/http-exeption.model";
 
 const app = express();
 
@@ -28,31 +29,15 @@ app.use("/api", router);
 app.use(static_("public"));
 
 // Get error message from HttpException
-app.use(
-  (
-    err: HttpException,
-    req: Request,
-    res: Response,
-    next: express.NextFunction
-  ) => {
-    res.status(err.statusCode || 500).json({
-      success: false,
-      stack: err.stack,
-      message: err.message.replace(/\n/g, ""),
-    });
-  }
-);
 
-// Error handling
 app.use(
   "*",
   expressAsyncHandler(async (req: Request, res: Response) => {
-    res.status(404).json({
-      success: false,
-      message: `Cannot ${req.method} ${req.originalUrl}`,
-    });
+    throw new HttpException(404, `Cannot ${req.method} ${req.originalUrl}`);
   })
 );
+
+app.use(errorHandler);
 
 app.get("/", (req: Request, res: Response) => {
   res.json({ success: true, status: "API is running on /api" });
